@@ -272,6 +272,8 @@ func termsToBinary(term interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error
 		return binaryToBinary(OtpErlangBinary{Value: term.([]byte), Bits: 8}, buffer)
 	case OtpErlangBinary:
 		return binaryToBinary(term.(OtpErlangBinary), buffer)
+	case map[interface{}]interface{}:
+		return mapToBinary(term.(map[interface{}]interface{}), buffer)
 	case OtpErlangTuple:
 		return tupleToBinary(term.(OtpErlangTuple), buffer)
 	case []interface{}:
@@ -510,6 +512,35 @@ func binaryToBinary(term OtpErlangBinary, buffer *bytes.Buffer) (*bytes.Buffer, 
 	}
 	_, err = buffer.Write(term.Value)
 	return buffer, err
+}
+
+func mapToBinary(term map[interface{}]interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error) {
+	var length int
+	var err error
+	switch length = len(term); {
+	case length <= math.MaxUint32:
+		err = buffer.WriteByte(tagMapExt)
+		if err != nil {
+			return buffer, err
+		}
+		err = binary.Write(buffer, binary.BigEndian, uint32(length))
+		if err != nil {
+			return buffer, err
+		}
+	default:
+		return buffer, outputErrorNew("uint32 overflow")
+	}
+	for key, value := range term {
+		buffer, err = termsToBinary(key, buffer)
+		if err != nil {
+			return buffer, err
+		}
+		buffer, err = termsToBinary(value, buffer)
+		if err != nil {
+			return buffer, err
+		}
+	}
+	return buffer, nil
 }
 
 func tupleToBinary(term []interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error) {
