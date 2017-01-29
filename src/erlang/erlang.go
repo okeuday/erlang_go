@@ -1,3 +1,4 @@
+package erlang
 //-*-Mode:Go;coding:utf-8;tab-width:4;c-basic-offset:4;indent-tabs-mode:()-*-
 // ex: set ft=go fenc=utf-8 sts=4 ts=4 sw=4 et nomod:
 //
@@ -38,10 +39,7 @@
 // DAMAGE.
 //
 
-package erlang
-
 import (
-    "fmt"
     "bytes"
     "encoding/binary"
     "compress/zlib"
@@ -81,92 +79,100 @@ const (
     tagSmallAtomUtf8Ext = 119
 )
 
+// ATOM_CACHE_REF
 type OtpErlangAtomCacheRef uint8
+
+// SMALL_ATOM_EXT or ATOM_EXT
 type OtpErlangAtom string
+
+// SMALL_ATOM_UTF8_EXT or ATOM_UTF8_EXT
 type OtpErlangAtomUTF8 string
 
+// NIL_EXT or LIST_EXT
 type OtpErlangList struct {
     Value []interface{}
     Improper bool
 }
 
+// SMALL_TUPLE_EXT or LARGE_TUPLE_EXT
 type OtpErlangTuple []interface{}
 
+// BIT_BINARY_EXT or BINARY_EXT
 type OtpErlangBinary struct {
     Value []byte
     Bits uint8
 }
 
+// FUN_EXT or NEW_FUN_EXT
 type OtpErlangFunction struct {
     Tag uint8
     Value []byte
 }
 
+// REFERENCE_EXT or NEW_REFERENCE_EXT
 type OtpErlangReference struct {
     Node OtpErlangAtom
-    Id []byte
+    ID []byte
     Creation byte
 }
 
+// PORT_EXT
 type OtpErlangPort struct {
     Node OtpErlangAtom
-    Id []byte
+    ID []byte
     Creation byte
 }
 
+// PID_EXT
 type OtpErlangPid struct {
     Node OtpErlangAtom
-    Id []byte
+    ID []byte
     Serial []byte
     Creation byte
 }
 
+// Parsing Error
 type ParseError struct {
     message string
 }
-func ParseErrorNew(message string) error {
+func parseErrorNew(message string) error {
     return &ParseError{message}
-}
-func ParseErrorNewFmt(format string, args ...interface{}) error {
-    return &ParseError{fmt.Sprintf(format, args...)}
 }
 func (e *ParseError) Error() string {
     return e.message
 }
 
+// Input Error
 type InputError struct {
     message string
 }
-func InputErrorNew(message string) error {
+func inputErrorNew(message string) error {
     return &InputError{message}
-}
-func InputErrorNewFmt(format string, args ...interface{}) error {
-    return &InputError{fmt.Sprintf(format, args...)}
 }
 func (e *InputError) Error() string {
     return e.message
 }
 
+// Output Error
 type OutputError struct {
     message string
 }
-func OutputErrorNew(message string) error {
+func outputErrorNew(message string) error {
     return &OutputError{message}
-}
-func OutputErrorNewFmt(format string, args ...interface{}) error {
-    return &OutputError{fmt.Sprintf(format, args...)}
 }
 func (e *OutputError) Error() string {
     return e.message
 }
 
+// Decode the Erlang Binary Term Format to Go types
 func BinaryToTerm(data []byte) (interface{}, error) {
-    return nil, ParseErrorNew("invalid")
+    return nil, parseErrorNew("invalid")
 }
 
+// Encode with the Erlang Binary Term Format from Go types
 func TermToBinary(term interface{}, compressed int) ([]byte, error) {
     if compressed < -1 || compressed > 9 {
-        return nil, InputErrorNew("compressed in [-1..9]")
+        return nil, inputErrorNew("compressed in [-1..9]")
     }
     dataUncompressed, err := termsToBinary(term, new(bytes.Buffer))
     if err != nil {
@@ -174,36 +180,35 @@ func TermToBinary(term interface{}, compressed int) ([]byte, error) {
     }
     if compressed == -1 {
         return append([]byte{tagVersion}, dataUncompressed.Bytes()...), nil
-    } else {
-        var dataCompressed *bytes.Buffer = new(bytes.Buffer)
-        compress, err := zlib.NewWriterLevel(dataCompressed, compressed)
-        if err != nil {
-            return nil, err
-        }
-        _, err = compress.Write(dataUncompressed.Bytes())
-        if err != nil {
-            return nil, err
-        }
-        err = compress.Close()
-        if err != nil {
-            return nil, err
-        }
-        var result *bytes.Buffer = new(bytes.Buffer)
-        _, err = result.Write([]byte{tagVersion, tagCompressedZlib})
-        if err != nil {
-            return nil, err
-        }
-        err = binary.Write(result, binary.BigEndian,
-                           uint32(dataUncompressed.Len()))
-        if err != nil {
-            return nil, err
-        }
-        _, err = result.Write(dataCompressed.Bytes())
-        if err != nil {
-            return nil, err
-        }
-        return result.Bytes(), nil
     }
+    var dataCompressed *bytes.Buffer = new(bytes.Buffer)
+    compress, err := zlib.NewWriterLevel(dataCompressed, compressed)
+    if err != nil {
+        return nil, err
+    }
+    _, err = compress.Write(dataUncompressed.Bytes())
+    if err != nil {
+        return nil, err
+    }
+    err = compress.Close()
+    if err != nil {
+        return nil, err
+    }
+    var result *bytes.Buffer = new(bytes.Buffer)
+    _, err = result.Write([]byte{tagVersion, tagCompressedZlib})
+    if err != nil {
+        return nil, err
+    }
+    err = binary.Write(result, binary.BigEndian,
+                       uint32(dataUncompressed.Len()))
+    if err != nil {
+        return nil, err
+    }
+    _, err = result.Write(dataCompressed.Bytes())
+    if err != nil {
+        return nil, err
+    }
+    return result.Bytes(), nil
 }
 
 func termsToBinary(term interface{},
@@ -237,7 +242,7 @@ func termsToBinary(term interface{},
                 case i >= math.MinInt64 && i <= math.MaxInt64:
                     return termsToBinary(int64(i), buffer)
                 default:
-                    return buffer, OutputErrorNewFmt("invalid int")
+                    return buffer, outputErrorNew("invalid int")
             }
         case *big.Int:
             return bignumToBinary(term.(*big.Int), buffer)
@@ -248,9 +253,8 @@ func termsToBinary(term interface{},
         case bool:
             if (term.(bool)) {
                 return atomToBinary("true", buffer)
-            } else {
-                return atomToBinary("false", buffer)
             }
+            return atomToBinary("false", buffer)
         case OtpErlangAtom:
             return atomToBinary(string(term.(OtpErlangAtom)), buffer)
         case OtpErlangAtomUTF8:
@@ -281,7 +285,7 @@ func termsToBinary(term interface{},
         case OtpErlangPid:
             return pidToBinary(term.(OtpErlangPid), buffer)
         default:
-            return buffer, OutputErrorNewFmt("unknown go type")
+            return buffer, outputErrorNew("unknown go type")
     }
 }
 
@@ -322,7 +326,7 @@ func bignumToBinary(term *big.Int,
                 return buffer, err
             }
         default:
-            return buffer, OutputErrorNew("uint32 overflow")
+            return buffer, outputErrorNew("uint32 overflow")
     }
     err = buffer.WriteByte(sign)
     if err != nil {
@@ -371,7 +375,7 @@ func atomToBinary(term string,
             _, err = buffer.WriteString(term)
             return buffer, err
         default:
-            return buffer, OutputErrorNew("uint16 overflow")
+            return buffer, outputErrorNew("uint16 overflow")
     }
 }
 
@@ -397,7 +401,7 @@ func atomUtf8ToBinary(term string,
             _, err = buffer.WriteString(term)
             return buffer, err
         default:
-            return buffer, OutputErrorNew("uint16 overflow")
+            return buffer, outputErrorNew("uint16 overflow")
     }
 }
 
@@ -436,7 +440,7 @@ func stringToBinary(term string,
             err = buffer.WriteByte(tagNilExt)
             return buffer, err
         default:
-            return buffer, OutputErrorNew("uint32 overflow")
+            return buffer, outputErrorNew("uint32 overflow")
     }
 }
 
@@ -465,7 +469,7 @@ func listToBinary(term OtpErlangList,
                 }
             }
         default:
-            return buffer, OutputErrorNew("uint32 overflow")
+            return buffer, outputErrorNew("uint32 overflow")
     }
     for i := 0; i < length; i++ {
         buffer, err = termsToBinary(term.Value[i], buffer)
@@ -476,7 +480,7 @@ func listToBinary(term OtpErlangList,
     if !term.Improper {
         err = buffer.WriteByte(tagNilExt)
     }
-    return buffer, nil
+    return buffer, err
 }
 
 func binaryToBinary(term OtpErlangBinary,
@@ -484,7 +488,7 @@ func binaryToBinary(term OtpErlangBinary,
     var err error
     switch length := len(term.Value); {
         case term.Bits < 1 || term.Bits > 8:
-            return buffer, OutputErrorNew("invalid OtpErlangBinary.Bits")
+            return buffer, outputErrorNew("invalid OtpErlangBinary.Bits")
         case length <= math.MaxUint32:
             if term.Bits != 8 {
                 err = buffer.WriteByte(tagBitBinaryExt)
@@ -510,7 +514,7 @@ func binaryToBinary(term OtpErlangBinary,
                 }
             }
         default:
-            return buffer, OutputErrorNew("uint32 overflow")
+            return buffer, outputErrorNew("uint32 overflow")
     }
     _, err = buffer.Write(term.Value)
     return buffer, err
@@ -536,7 +540,7 @@ func tupleToBinary(term []interface{},
                 return buffer, err
             }
         default:
-            return buffer, OutputErrorNew("uint32 overflow")
+            return buffer, outputErrorNew("uint32 overflow")
     }
     for i := 0; i < length; i++ {
         buffer, err = termsToBinary(term[i], buffer)
@@ -559,7 +563,7 @@ func functionToBinary(term OtpErlangFunction,
 
 func referenceToBinary(term OtpErlangReference,
                        buffer *bytes.Buffer) (*bytes.Buffer, error) {
-    switch length := len(term.Id) / 4; {
+    switch length := len(term.ID) / 4; {
         case length == 0:
             err := buffer.WriteByte(tagReferenceExt)
             if err != nil {
@@ -569,7 +573,7 @@ func referenceToBinary(term OtpErlangReference,
             if err != nil {
                 return buffer, err
             }
-            _, err = buffer.Write(term.Id)
+            _, err = buffer.Write(term.ID)
             if err != nil {
                 return buffer, err
             }
@@ -592,10 +596,10 @@ func referenceToBinary(term OtpErlangReference,
             if err != nil {
                 return buffer, err
             }
-            _, err = buffer.Write(term.Id)
+            _, err = buffer.Write(term.ID)
             return buffer, err
         default:
-            return buffer, OutputErrorNew("uint16 overflow")
+            return buffer, outputErrorNew("uint16 overflow")
     }
 }
 
@@ -609,7 +613,7 @@ func portToBinary(term OtpErlangPort,
     if err != nil {
         return buffer, err
     }
-    _, err = buffer.Write(term.Id)
+    _, err = buffer.Write(term.ID)
     if err != nil {
         return buffer, err
     }
@@ -627,7 +631,7 @@ func pidToBinary(term OtpErlangPid,
     if err != nil {
         return buffer, err
     }
-    _, err = buffer.Write(term.Id)
+    _, err = buffer.Write(term.ID)
     if err != nil {
         return buffer, err
     }
