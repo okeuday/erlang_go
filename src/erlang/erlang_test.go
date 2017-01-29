@@ -75,9 +75,8 @@ func encode(t *testing.T, term interface{}, compressed int) string {
         log.Output(2, err.Error())
         t.FailNow()
         return ""
-    } else {
-        return string(b)
     }
+    return string(b)
 }
 
 func TestAtom(t *testing.T) {

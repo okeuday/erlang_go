@@ -79,51 +79,51 @@ const (
     tagSmallAtomUtf8Ext = 119
 )
 
-// ATOM_CACHE_REF
+// OtpErlangAtomCacheRef represents ATOM_CACHE_REF
 type OtpErlangAtomCacheRef uint8
 
-// SMALL_ATOM_EXT or ATOM_EXT
+// OtpErlangAtom represents SMALL_ATOM_EXT or ATOM_EXT
 type OtpErlangAtom string
 
-// SMALL_ATOM_UTF8_EXT or ATOM_UTF8_EXT
+// OtpErlangAtomUTF8 represents SMALL_ATOM_UTF8_EXT or ATOM_UTF8_EXT
 type OtpErlangAtomUTF8 string
 
-// NIL_EXT or LIST_EXT
+// OtpErlangList represents NIL_EXT or LIST_EXT
 type OtpErlangList struct {
     Value []interface{}
     Improper bool
 }
 
-// SMALL_TUPLE_EXT or LARGE_TUPLE_EXT
+// OtpErlangTuple represents SMALL_TUPLE_EXT or LARGE_TUPLE_EXT
 type OtpErlangTuple []interface{}
 
-// BIT_BINARY_EXT or BINARY_EXT
+// OtpErlangBinary represents BIT_BINARY_EXT or BINARY_EXT
 type OtpErlangBinary struct {
     Value []byte
     Bits uint8
 }
 
-// FUN_EXT or NEW_FUN_EXT
+// OtpErlangFunction represents FUN_EXT or NEW_FUN_EXT
 type OtpErlangFunction struct {
     Tag uint8
     Value []byte
 }
 
-// REFERENCE_EXT or NEW_REFERENCE_EXT
+// OtpErlangReference represents REFERENCE_EXT or NEW_REFERENCE_EXT
 type OtpErlangReference struct {
     Node OtpErlangAtom
     ID []byte
     Creation byte
 }
 
-// PORT_EXT
+// OtpErlangPort represents PORT_EXT
 type OtpErlangPort struct {
     Node OtpErlangAtom
     ID []byte
     Creation byte
 }
 
-// PID_EXT
+// OtpErlangPid represents PID_EXT
 type OtpErlangPid struct {
     Node OtpErlangAtom
     ID []byte
@@ -131,7 +131,7 @@ type OtpErlangPid struct {
     Creation byte
 }
 
-// Parsing Error
+// ParsingError provides specific parsing failure information
 type ParseError struct {
     message string
 }
@@ -142,7 +142,7 @@ func (e *ParseError) Error() string {
     return e.message
 }
 
-// Input Error
+// InputError describes problems with function input parameters
 type InputError struct {
     message string
 }
@@ -153,7 +153,7 @@ func (e *InputError) Error() string {
     return e.message
 }
 
-// Output Error
+// OutputError describes problems with creating function output data
 type OutputError struct {
     message string
 }
@@ -164,12 +164,12 @@ func (e *OutputError) Error() string {
     return e.message
 }
 
-// Decode the Erlang Binary Term Format to Go types
+// BinaryToTerm decodes the Erlang Binary Term Format into Go types
 func BinaryToTerm(data []byte) (interface{}, error) {
     return nil, parseErrorNew("invalid")
 }
 
-// Encode with the Erlang Binary Term Format from Go types
+// TermToBinary encodes Go types into the Erlang Binary Term Format
 func TermToBinary(term interface{}, compressed int) ([]byte, error) {
     if compressed < -1 || compressed > 9 {
         return nil, inputErrorNew("compressed in [-1..9]")
@@ -334,9 +334,9 @@ func bignumToBinary(term *big.Int,
     }
     // little-endian is required
     half := length >> 1
-    i_last := length - 1
+    iLast := length - 1
     for i := 0; i < half; i++ {
-        j := i_last - i
+        j := iLast - i
         value[i], value[j] = value[j], value[i]
     }
     _, err = buffer.Write(value)
