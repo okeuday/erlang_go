@@ -203,8 +203,7 @@ func TermToBinary(term interface{}, compressed int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = binary.Write(result, binary.BigEndian,
-		uint32(dataUncompressed.Len()))
+	err = binary.Write(result, binary.BigEndian, uint32(dataUncompressed.Len()))
 	if err != nil {
 		return nil, err
 	}
@@ -263,16 +262,14 @@ func termsToBinary(term interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error
 	case OtpErlangAtomUTF8:
 		return atomUtf8ToBinary(string(term.(OtpErlangAtomUTF8)), buffer)
 	case OtpErlangAtomCacheRef:
-		_, err := buffer.Write([]byte{tagAtomCacheRef,
-			uint8(term.(OtpErlangAtomCacheRef))})
+		_, err := buffer.Write([]byte{tagAtomCacheRef, uint8(term.(OtpErlangAtomCacheRef))})
 		return buffer, err
 	case string:
 		return stringToBinary(term.(string), buffer)
 	case OtpErlangList:
 		return listToBinary(term.(OtpErlangList), buffer)
 	case []byte:
-		return binaryToBinary(OtpErlangBinary{Value: term.([]byte),
-			Bits: 8}, buffer)
+		return binaryToBinary(OtpErlangBinary{Value: term.([]byte), Bits: 8}, buffer)
 	case OtpErlangBinary:
 		return binaryToBinary(term.(OtpErlangBinary), buffer)
 	case OtpErlangTuple:
