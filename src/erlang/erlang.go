@@ -80,23 +80,16 @@ const (
 	tagSmallAtomUtf8Ext = 119
 )
 
-// OtpErlangAtomCacheRef represents ATOM_CACHE_REF
-type OtpErlangAtomCacheRef uint8
+// Erlang term structs listed alphabetically
 
 // OtpErlangAtom represents SMALL_ATOM_EXT or ATOM_EXT
 type OtpErlangAtom string
 
+// OtpErlangAtomCacheRef represents ATOM_CACHE_REF
+type OtpErlangAtomCacheRef uint8
+
 // OtpErlangAtomUTF8 represents SMALL_ATOM_UTF8_EXT or ATOM_UTF8_EXT
 type OtpErlangAtomUTF8 string
-
-// OtpErlangList represents NIL_EXT or LIST_EXT
-type OtpErlangList struct {
-	Value    []interface{}
-	Improper bool
-}
-
-// OtpErlangTuple represents SMALL_TUPLE_EXT or LARGE_TUPLE_EXT
-type OtpErlangTuple []interface{}
 
 // OtpErlangBinary represents BIT_BINARY_EXT or BINARY_EXT
 type OtpErlangBinary struct {
@@ -110,18 +103,10 @@ type OtpErlangFunction struct {
 	Value []byte
 }
 
-// OtpErlangReference represents REFERENCE_EXT or NEW_REFERENCE_EXT
-type OtpErlangReference struct {
-	Node     OtpErlangAtom
-	ID       []byte
-	Creation byte
-}
-
-// OtpErlangPort represents PORT_EXT
-type OtpErlangPort struct {
-	Node     OtpErlangAtom
-	ID       []byte
-	Creation byte
+// OtpErlangList represents NIL_EXT or LIST_EXT
+type OtpErlangList struct {
+	Value    []interface{}
+	Improper bool
 }
 
 // OtpErlangPid represents PID_EXT
@@ -132,17 +117,24 @@ type OtpErlangPid struct {
 	Creation byte
 }
 
-// ParseError provides specific parsing failure information
-type ParseError struct {
-	message string
+// OtpErlangPort represents PORT_EXT
+type OtpErlangPort struct {
+	Node     OtpErlangAtom
+	ID       []byte
+	Creation byte
 }
 
-func parseErrorNew(message string) error {
-	return &ParseError{message}
+// OtpErlangReference represents REFERENCE_EXT or NEW_REFERENCE_EXT
+type OtpErlangReference struct {
+	Node     OtpErlangAtom
+	ID       []byte
+	Creation byte
 }
-func (e *ParseError) Error() string {
-	return e.message
-}
+
+// OtpErlangTuple represents SMALL_TUPLE_EXT or LARGE_TUPLE_EXT
+type OtpErlangTuple []interface{}
+
+// Error structs listed alphabetically
 
 // InputError describes problems with function input parameters
 type InputError struct {
@@ -167,6 +159,20 @@ func outputErrorNew(message string) error {
 func (e *OutputError) Error() string {
 	return e.message
 }
+
+// ParseError provides specific parsing failure information
+type ParseError struct {
+	message string
+}
+
+func parseErrorNew(message string) error {
+	return &ParseError{message}
+}
+func (e *ParseError) Error() string {
+	return e.message
+}
+
+// core functionality
 
 // BinaryToTerm decodes the Erlang Binary Term Format into Go types
 func BinaryToTerm(data []byte) (interface{}, error) {
@@ -213,6 +219,16 @@ func TermToBinary(term interface{}, compressed int) ([]byte, error) {
 	}
 	return result.Bytes(), nil
 }
+
+// BinaryToTerm implementation functions
+
+// XXX
+
+// (BinaryToTerm Erlang term primitive type functions)
+
+// XXX
+
+// TermToBinary implementation functions
 
 func termsToBinary(term interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error) {
 	switch term.(type) {
@@ -269,9 +285,9 @@ func termsToBinary(term interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error
 	case OtpErlangList:
 		return listToBinary(term.(OtpErlangList), buffer)
 	case []byte:
-		return binaryToBinary(OtpErlangBinary{Value: term.([]byte), Bits: 8}, buffer)
+		return binaryObjectToBinary(OtpErlangBinary{Value: term.([]byte), Bits: 8}, buffer)
 	case OtpErlangBinary:
-		return binaryToBinary(term.(OtpErlangBinary), buffer)
+		return binaryObjectToBinary(term.(OtpErlangBinary), buffer)
 	case map[interface{}]interface{}:
 		return mapToBinary(term.(map[interface{}]interface{}), buffer)
 	case OtpErlangTuple:
@@ -290,6 +306,145 @@ func termsToBinary(term interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error
 		return buffer, outputErrorNew("unknown go type")
 	}
 }
+
+// (TermToBinary Erlang term composite type functions)
+
+func stringToBinary(term string, buffer *bytes.Buffer) (*bytes.Buffer, error) {
+	switch length := len(term); {
+	case length == 0:
+		err := buffer.WriteByte(tagNilExt)
+		return buffer, err
+	case length <= math.MaxUint16:
+		err := buffer.WriteByte(tagStringExt)
+		if err != nil {
+			return buffer, err
+		}
+		err = binary.Write(buffer, binary.BigEndian, uint16(length))
+		if err != nil {
+			return buffer, err
+		}
+		_, err = buffer.WriteString(term)
+		return buffer, err
+	case length <= math.MaxUint32:
+		err := buffer.WriteByte(tagListExt)
+		if err != nil {
+			return buffer, err
+		}
+		err = binary.Write(buffer, binary.BigEndian, uint32(length))
+		if err != nil {
+			return buffer, err
+		}
+		for i := 0; i < length; i++ {
+			_, err = buffer.Write([]byte{tagSmallIntegerExt, term[i]})
+			if err != nil {
+				return buffer, err
+			}
+		}
+		err = buffer.WriteByte(tagNilExt)
+		return buffer, err
+	default:
+		return buffer, outputErrorNew("uint32 overflow")
+	}
+}
+
+func tupleToBinary(term []interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error) {
+	var length int
+	var err error
+	switch length = len(term); {
+	case length <= math.MaxUint8:
+		_, err = buffer.Write([]byte{tagSmallTupleExt, byte(length)})
+		if err != nil {
+			return buffer, err
+		}
+	case length <= math.MaxUint32:
+		err = buffer.WriteByte(tagLargeTupleExt)
+		if err != nil {
+			return buffer, err
+		}
+		err = binary.Write(buffer, binary.BigEndian, uint32(length))
+		if err != nil {
+			return buffer, err
+		}
+	default:
+		return buffer, outputErrorNew("uint32 overflow")
+	}
+	for i := 0; i < length; i++ {
+		buffer, err = termsToBinary(term[i], buffer)
+		if err != nil {
+			return buffer, err
+		}
+	}
+	return buffer, nil
+}
+
+func mapToBinary(term map[interface{}]interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error) {
+	var length int
+	var err error
+	switch length = len(term); {
+	case length <= math.MaxUint32:
+		err = buffer.WriteByte(tagMapExt)
+		if err != nil {
+			return buffer, err
+		}
+		err = binary.Write(buffer, binary.BigEndian, uint32(length))
+		if err != nil {
+			return buffer, err
+		}
+	default:
+		return buffer, outputErrorNew("uint32 overflow")
+	}
+	for key, value := range term {
+		buffer, err = termsToBinary(key, buffer)
+		if err != nil {
+			return buffer, err
+		}
+		buffer, err = termsToBinary(value, buffer)
+		if err != nil {
+			return buffer, err
+		}
+	}
+	return buffer, nil
+}
+
+func listToBinary(term OtpErlangList, buffer *bytes.Buffer) (*bytes.Buffer, error) {
+	var length int
+	var err error
+	switch length = len(term.Value); {
+	case length == 0:
+		err = buffer.WriteByte(tagNilExt)
+		return buffer, err
+	case length <= math.MaxUint32:
+		err = buffer.WriteByte(tagListExt)
+		if err != nil {
+			return buffer, err
+		}
+		if term.Improper {
+			err = binary.Write(buffer, binary.BigEndian, uint32(length-1))
+			if err != nil {
+				return buffer, err
+			}
+		} else {
+			err = binary.Write(buffer, binary.BigEndian, uint32(length))
+			if err != nil {
+				return buffer, err
+			}
+		}
+	default:
+		return buffer, outputErrorNew("uint32 overflow")
+	}
+	for i := 0; i < length; i++ {
+		buffer, err = termsToBinary(term.Value[i], buffer)
+		if err != nil {
+			return buffer, err
+		}
+	}
+	if !term.Improper {
+		err = buffer.WriteByte(tagNilExt)
+	}
+	return buffer, err
+}
+
+// (TermToBinary Erlang term primitive type functions)
 
 func integerToBinary(term int32, buffer *bytes.Buffer) (*bytes.Buffer, error) {
 	err := buffer.WriteByte(tagIntegerExt)
@@ -402,83 +557,7 @@ func atomUtf8ToBinary(term string, buffer *bytes.Buffer) (*bytes.Buffer, error) 
 	}
 }
 
-func stringToBinary(term string, buffer *bytes.Buffer) (*bytes.Buffer, error) {
-	switch length := len(term); {
-	case length == 0:
-		err := buffer.WriteByte(tagNilExt)
-		return buffer, err
-	case length <= math.MaxUint16:
-		err := buffer.WriteByte(tagStringExt)
-		if err != nil {
-			return buffer, err
-		}
-		err = binary.Write(buffer, binary.BigEndian, uint16(length))
-		if err != nil {
-			return buffer, err
-		}
-		_, err = buffer.WriteString(term)
-		return buffer, err
-	case length <= math.MaxUint32:
-		err := buffer.WriteByte(tagListExt)
-		if err != nil {
-			return buffer, err
-		}
-		err = binary.Write(buffer, binary.BigEndian, uint32(length))
-		if err != nil {
-			return buffer, err
-		}
-		for i := 0; i < length; i++ {
-			_, err = buffer.Write([]byte{tagSmallIntegerExt, term[i]})
-			if err != nil {
-				return buffer, err
-			}
-		}
-		err = buffer.WriteByte(tagNilExt)
-		return buffer, err
-	default:
-		return buffer, outputErrorNew("uint32 overflow")
-	}
-}
-
-func listToBinary(term OtpErlangList, buffer *bytes.Buffer) (*bytes.Buffer, error) {
-	var length int
-	var err error
-	switch length = len(term.Value); {
-	case length == 0:
-		err = buffer.WriteByte(tagNilExt)
-		return buffer, err
-	case length <= math.MaxUint32:
-		err = buffer.WriteByte(tagListExt)
-		if err != nil {
-			return buffer, err
-		}
-		if term.Improper {
-			err = binary.Write(buffer, binary.BigEndian, uint32(length-1))
-			if err != nil {
-				return buffer, err
-			}
-		} else {
-			err = binary.Write(buffer, binary.BigEndian, uint32(length))
-			if err != nil {
-				return buffer, err
-			}
-		}
-	default:
-		return buffer, outputErrorNew("uint32 overflow")
-	}
-	for i := 0; i < length; i++ {
-		buffer, err = termsToBinary(term.Value[i], buffer)
-		if err != nil {
-			return buffer, err
-		}
-	}
-	if !term.Improper {
-		err = buffer.WriteByte(tagNilExt)
-	}
-	return buffer, err
-}
-
-func binaryToBinary(term OtpErlangBinary, buffer *bytes.Buffer) (*bytes.Buffer, error) {
+func binaryObjectToBinary(term OtpErlangBinary, buffer *bytes.Buffer) (*bytes.Buffer, error) {
 	var err error
 	switch length := len(term.Value); {
 	case term.Bits < 1 || term.Bits > 8:
@@ -514,71 +593,50 @@ func binaryToBinary(term OtpErlangBinary, buffer *bytes.Buffer) (*bytes.Buffer, 
 	return buffer, err
 }
 
-func mapToBinary(term map[interface{}]interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error) {
-	var length int
-	var err error
-	switch length = len(term); {
-	case length <= math.MaxUint32:
-		err = buffer.WriteByte(tagMapExt)
-		if err != nil {
-			return buffer, err
-		}
-		err = binary.Write(buffer, binary.BigEndian, uint32(length))
-		if err != nil {
-			return buffer, err
-		}
-	default:
-		return buffer, outputErrorNew("uint32 overflow")
-	}
-	for key, value := range term {
-		buffer, err = termsToBinary(key, buffer)
-		if err != nil {
-			return buffer, err
-		}
-		buffer, err = termsToBinary(value, buffer)
-		if err != nil {
-			return buffer, err
-		}
-	}
-	return buffer, nil
-}
-
-func tupleToBinary(term []interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error) {
-	var length int
-	var err error
-	switch length = len(term); {
-	case length <= math.MaxUint8:
-		_, err = buffer.Write([]byte{tagSmallTupleExt, byte(length)})
-		if err != nil {
-			return buffer, err
-		}
-	case length <= math.MaxUint32:
-		err = buffer.WriteByte(tagLargeTupleExt)
-		if err != nil {
-			return buffer, err
-		}
-		err = binary.Write(buffer, binary.BigEndian, uint32(length))
-		if err != nil {
-			return buffer, err
-		}
-	default:
-		return buffer, outputErrorNew("uint32 overflow")
-	}
-	for i := 0; i < length; i++ {
-		buffer, err = termsToBinary(term[i], buffer)
-		if err != nil {
-			return buffer, err
-		}
-	}
-	return buffer, nil
-}
-
 func functionToBinary(term OtpErlangFunction, buffer *bytes.Buffer) (*bytes.Buffer, error) {
 	err := buffer.WriteByte(term.Tag)
 	if err != nil {
 		return buffer, err
 	}
 	_, err = buffer.Write(term.Value)
+	return buffer, err
+}
+
+func pidToBinary(term OtpErlangPid, buffer *bytes.Buffer) (*bytes.Buffer, error) {
+	err := buffer.WriteByte(tagPidExt)
+	if err != nil {
+		return buffer, err
+	}
+	buffer, err = termsToBinary(term.Node, buffer)
+	if err != nil {
+		return buffer, err
+	}
+	_, err = buffer.Write(term.ID)
+	if err != nil {
+		return buffer, err
+	}
+	_, err = buffer.Write(term.Serial)
+	if err != nil {
+		return buffer, err
+	}
+	err = buffer.WriteByte(term.Creation)
+	return buffer, err
+}
+
+func portToBinary(term OtpErlangPort, buffer *bytes.Buffer) (*bytes.Buffer, error) {
+	err := buffer.WriteByte(tagPortExt)
+	if err != nil {
+		return buffer, err
+	}
+	buffer, err = termsToBinary(term.Node, buffer)
+	if err != nil {
+		return buffer, err
+	}
+	_, err = buffer.Write(term.ID)
+	if err != nil {
+		return buffer, err
+	}
+	err = buffer.WriteByte(term.Creation)
 	return buffer, err
 }
 
@@ -621,42 +679,4 @@ func referenceToBinary(term OtpErlangReference, buffer *bytes.Buffer) (*bytes.Bu
 	default:
 		return buffer, outputErrorNew("uint16 overflow")
 	}
-}
-
-func portToBinary(term OtpErlangPort, buffer *bytes.Buffer) (*bytes.Buffer, error) {
-	err := buffer.WriteByte(tagPortExt)
-	if err != nil {
-		return buffer, err
-	}
-	buffer, err = termsToBinary(term.Node, buffer)
-	if err != nil {
-		return buffer, err
-	}
-	_, err = buffer.Write(term.ID)
-	if err != nil {
-		return buffer, err
-	}
-	err = buffer.WriteByte(term.Creation)
-	return buffer, err
-}
-
-func pidToBinary(term OtpErlangPid, buffer *bytes.Buffer) (*bytes.Buffer, error) {
-	err := buffer.WriteByte(tagPidExt)
-	if err != nil {
-		return buffer, err
-	}
-	buffer, err = termsToBinary(term.Node, buffer)
-	if err != nil {
-		return buffer, err
-	}
-	_, err = buffer.Write(term.ID)
-	if err != nil {
-		return buffer, err
-	}
-	_, err = buffer.Write(term.Serial)
-	if err != nil {
-		return buffer, err
-	}
-	err = buffer.WriteByte(term.Creation)
-	return buffer, err
 }
