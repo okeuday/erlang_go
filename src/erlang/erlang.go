@@ -109,6 +109,9 @@ type OtpErlangList struct {
 	Improper bool
 }
 
+// OtpErlangMap represents MAP_EXT
+type OtpErlangMap map[interface{}]interface{}
+
 // OtpErlangPid represents PID_EXT
 type OtpErlangPid struct {
 	Node     OtpErlangAtom
@@ -280,28 +283,30 @@ func termsToBinary(term interface{}, buffer *bytes.Buffer) (*bytes.Buffer, error
 	case OtpErlangAtomCacheRef:
 		_, err := buffer.Write([]byte{tagAtomCacheRef, uint8(term.(OtpErlangAtomCacheRef))})
 		return buffer, err
-	case string:
-		return stringToBinary(term.(string), buffer)
-	case OtpErlangList:
-		return listToBinary(term.(OtpErlangList), buffer)
 	case []byte:
 		return binaryObjectToBinary(OtpErlangBinary{Value: term.([]byte), Bits: 8}, buffer)
 	case OtpErlangBinary:
 		return binaryObjectToBinary(term.(OtpErlangBinary), buffer)
-	case map[interface{}]interface{}:
-		return mapToBinary(term.(map[interface{}]interface{}), buffer)
+	case OtpErlangFunction:
+		return functionToBinary(term.(OtpErlangFunction), buffer)
+	case OtpErlangPid:
+		return pidToBinary(term.(OtpErlangPid), buffer)
+	case OtpErlangPort:
+		return portToBinary(term.(OtpErlangPort), buffer)
+	case OtpErlangReference:
+		return referenceToBinary(term.(OtpErlangReference), buffer)
+	case string:
+		return stringToBinary(term.(string), buffer)
 	case OtpErlangTuple:
 		return tupleToBinary(term.(OtpErlangTuple), buffer)
 	case []interface{}:
 		return tupleToBinary(term.([]interface{}), buffer)
-	case OtpErlangFunction:
-		return functionToBinary(term.(OtpErlangFunction), buffer)
-	case OtpErlangReference:
-		return referenceToBinary(term.(OtpErlangReference), buffer)
-	case OtpErlangPort:
-		return portToBinary(term.(OtpErlangPort), buffer)
-	case OtpErlangPid:
-		return pidToBinary(term.(OtpErlangPid), buffer)
+	case OtpErlangMap:
+		return mapToBinary(term.(OtpErlangMap), buffer)
+	case map[interface{}]interface{}:
+		return mapToBinary(term.(map[interface{}]interface{}), buffer)
+	case OtpErlangList:
+		return listToBinary(term.(OtpErlangList), buffer)
 	default:
 		return buffer, outputErrorNew("unknown go type")
 	}
