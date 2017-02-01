@@ -275,9 +275,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		i += 1
 		value := make([]byte, j)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, nil, err
+		if j > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, nil, err
+			}
 		}
 		return i + int(j), OtpErlangBinary{Value: value, Bits: bits}, nil
 	case tagAtomCacheRef:
@@ -321,9 +323,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		i += 2
 		value := make([]byte, j)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, nil, err
+		if j > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, nil, err
+			}
 		}
 		return i + int(j), OtpErlangAtom(value), nil
 	case tagReferenceExt:
@@ -421,9 +425,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		i += 2
 		value := make([]byte, j)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, nil, err
+		if j > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, nil, err
+			}
 		}
 		return i + int(j), string(value), nil
 	case tagListExt:
@@ -462,9 +468,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		i += 4
 		value := make([]byte, j)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, nil, err
+		if j > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, nil, err
+			}
 		}
 		return i + int(j), OtpErlangBinary{Value: value, Bits: 8}, nil
 	case tagSmallBigExt:
@@ -523,9 +531,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		i += 4
 		value := make([]byte, length)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, nil, err
+		if length > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, nil, err
+			}
 		}
 		return i + int(length), OtpErlangFunction{Tag: tag, Value: value}, nil
 	case tagExportExt:
@@ -579,9 +589,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		i += 1
 		id := make([]byte, j)
-		_, err = reader.Read(id)
-		if err != nil {
-			return i, nil, err
+		if j > 0 {
+			_, err = reader.Read(id)
+			if err != nil {
+				return i, nil, err
+			}
 		}
 		return i + int(j), OtpErlangReference{NodeTag: nodeTag, Node: node, ID: id, Creation: creation}, nil
 	case tagSmallAtomExt:
@@ -592,9 +604,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		i += 1
 		value := make([]byte, j)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, nil, err
+		if j > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, nil, err
+			}
 		}
 		return i + int(j), OtpErlangAtom(value), nil
 	case tagMapExt:
@@ -661,9 +675,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		i += 2
 		value := make([]byte, j)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, nil, err
+		if j > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, nil, err
+			}
 		}
 		return i + int(j), OtpErlangAtomUTF8(value), nil
 	case tagSmallAtomUtf8Ext:
@@ -674,9 +690,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		i += 1
 		value := make([]byte, j)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, nil, err
+		if j > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, nil, err
+			}
 		}
 		return i + int(j), OtpErlangAtomUTF8(value), nil
 	case tagCompressedZlib:
@@ -784,9 +802,11 @@ func binaryToAtom(i int, reader *bytes.Reader) (int, uint8, []byte, error) {
 		}
 		i += 2
 		value := make([]byte, j)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, tag, nil, err
+		if j > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, tag, nil, err
+			}
 		}
 		return i + int(j), tag, value, nil
 	case tagSmallAtomExt:
@@ -799,9 +819,11 @@ func binaryToAtom(i int, reader *bytes.Reader) (int, uint8, []byte, error) {
 		}
 		i += 1
 		value := make([]byte, j)
-		_, err = reader.Read(value)
-		if err != nil {
-			return i, tag, nil, err
+		if j > 0 {
+			_, err = reader.Read(value)
+			if err != nil {
+				return i, tag, nil, err
+			}
 		}
 		return i + int(j), tag, value, nil
 	case tagAtomCacheRef:
