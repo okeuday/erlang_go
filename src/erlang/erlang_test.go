@@ -170,14 +170,14 @@ func TestDecodeBinaryToTermBinary(t *testing.T) {
 }
 
 func TestDecodeBinaryToTermFloat(t *testing.T) {
-	assertDecodeError(t, "EOF","\x83F", "")
-	assertDecodeError(t, "unexpected EOF","\x83F\x00", "")
-	assertDecodeError(t, "unexpected EOF","\x83F\x00\x00", "")
-	assertDecodeError(t, "unexpected EOF","\x83F\x00\x00\x00", "")
-	assertDecodeError(t, "unexpected EOF","\x83F\x00\x00\x00\x00", "")
-	assertDecodeError(t, "unexpected EOF","\x83F\x00\x00\x00\x00\x00", "")
-	assertDecodeError(t, "unexpected EOF","\x83F\x00\x00\x00\x00\x00\x00", "")
-	assertDecodeError(t, "unexpected EOF","\x83F\x00\x00\x00\x00\x00\x00\x00", "")
+	assertDecodeError(t, "EOF", "\x83F", "")
+	assertDecodeError(t, "unexpected EOF", "\x83F\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83F\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83F\x00\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83F\x00\x00\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83F\x00\x00\x00\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83F\x00\x00\x00\x00\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83F\x00\x00\x00\x00\x00\x00\x00", "")
 	assertEqual(t, 0.0, decode(t, "\x83F\x00\x00\x00\x00\x00\x00\x00\x00"), "")
 	assertEqual(t, 1.5, decode(t, "\x83F?\xf8\x00\x00\x00\x00\x00\x00"), "")
 }
