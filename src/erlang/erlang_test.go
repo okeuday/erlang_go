@@ -71,7 +71,7 @@ func assertDecodeError(t *testing.T, expectedError, b string, message string) {
 	if err == nil {
 		log.SetPrefix("\t")
 		log.SetFlags(log.Lshortfile)
-		log.Output(2, err.Error())
+		log.Output(2, fmt.Sprintf("no error to compare with \"%s\"", expectedError))
 		t.FailNow()
 		return
 	}
@@ -137,7 +137,6 @@ func TestDecodeBinaryToTerm(t *testing.T) {
 	assertDecodeError(t, "null input", "\x83", "")
 	assertDecodeError(t, "invalid tag", "\x83z", "")
 }
-
 func TestDecodeBinaryToTermAtom(t *testing.T) {
 	assertDecodeError(t, "EOF", "\x83d", "")
 	assertDecodeError(t, "unexpected EOF", "\x83d\x00", "")
@@ -148,18 +147,77 @@ func TestDecodeBinaryToTermAtom(t *testing.T) {
 	assertEqual(t, OtpErlangAtom("test"), decode(t, "\x83d\x00\x04test"), "")
 	assertEqual(t, OtpErlangAtom("test"), decode(t, "\x83s\x04test"), "")
 }
-
 func TestDecodeBinaryToTermPredefinedAtom(t *testing.T) {
 	assertEqual(t, OtpErlangAtom("true"), decode(t, "\x83s\x04true"), "")
 	assertEqual(t, OtpErlangAtom("false"), decode(t, "\x83s\x05false"), "")
 	assertEqual(t, OtpErlangAtom("undefined"), decode(t, "\x83d\x00\x09undefined"), "")
 }
-
 func TestDecodeBinaryToTermEmptyList(t *testing.T) {
 	assertEqual(t, OtpErlangList{Value: make([]interface{}, 0), Improper: false}, decode(t, "\x83j"), "")
 }
-
-//...
+func TestDecodeBinaryToTermStringList(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83k", "")
+	assertDecodeError(t, "unexpected EOF", "\x83k\x00", "")
+	assertDecodeError(t, "EOF", "\x83k\x00\x01", "")
+	assertEqual(t, "", decode(t, "\x83k\x00\x00"), "")
+	assertEqual(t, "test", decode(t, "\x83k\x00\x04test"), "")
+}
+func TestDecodeBinaryToTermList(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83l", "")
+	assertDecodeError(t, "unexpected EOF", "\x83l\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83l\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83l\x00\x00\x00", "")
+	assertDecodeError(t, "EOF", "\x83l\x00\x00\x00\x00", "")
+	assertEqual(t, OtpErlangList{Value: make([]interface{}, 0), Improper: false}, decode(t, "\x83l\x00\x00\x00\x00j"), "")
+	list1 := make([]interface{}, 2)
+	list1[0] = OtpErlangList{Value: make([]interface{}, 0), Improper: false}
+	list1[1] = OtpErlangList{Value: make([]interface{}, 0), Improper: false}
+	assertEqual(t, OtpErlangList{Value: list1, Improper: false}, decode(t, "\x83l\x00\x00\x00\x02jjj"), "")
+}
+func TestDecodeBinaryToTermImproperList(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83l\x00\x00\x00k", "")
+	lst := decode(t, "\x83l\x00\x00\x00\x01jd\x00\x04tail")
+	lstCmp := make([]interface{}, 2)
+	lstCmp[0] = OtpErlangList{Value: make([]interface{}, 0), Improper: false}
+	lstCmp[1] = OtpErlangAtom("tail")
+	assertEqual(t, OtpErlangList{Value: lstCmp, Improper: true}, lst, "")
+}
+func TestDecodeBinaryToTermSmallTuple(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83h", "")
+	assertDecodeError(t, "EOF", "\x83h\x01", "")
+	assertEqual(t, OtpErlangTuple(make([]interface{}, 0)), decode(t, "\x83h\x00"), "")
+	tuple1 := make([]interface{}, 2)
+	tuple1[0] = OtpErlangList{Value: make([]interface{}, 0), Improper: false}
+	tuple1[1] = OtpErlangList{Value: make([]interface{}, 0), Improper: false}
+	assertEqual(t, OtpErlangTuple(tuple1), decode(t, "\x83h\x02jj"), "")
+}
+func TestDecodeBinaryToTermLargeTuple(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83i", "")
+	assertDecodeError(t, "unexpected EOF", "\x83i\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83i\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83i\x00\x00\x00", "")
+	assertDecodeError(t, "EOF", "\x83i\x00\x00\x00\x01", "")
+	assertEqual(t, OtpErlangTuple(make([]interface{}, 0)), decode(t, "\x83i\x00\x00\x00\x00"), "")
+	tuple1 := make([]interface{}, 2)
+	tuple1[0] = OtpErlangList{Value: make([]interface{}, 0), Improper: false}
+	tuple1[1] = OtpErlangList{Value: make([]interface{}, 0), Improper: false}
+	assertEqual(t, OtpErlangTuple(tuple1), decode(t, "\x83i\x00\x00\x00\x02jj"), "")
+}
+func TestDecodeBinaryToTermSmallInteger(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83a", "")
+	assertEqual(t, uint8(0), decode(t, "\x83a\x00"), "")
+	assertEqual(t, uint8(255), decode(t, "\x83a\xff"), "")
+}
+func TestDecodeBinaryToTermInteger(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83b", "")
+	assertDecodeError(t, "unexpected EOF", "\x83b\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83b\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83b\x00\x00\x00", "")
+	assertEqual(t, int32(0), decode(t, "\x83b\x00\x00\x00\x00"), "")
+	assertEqual(t, int32(2147483647), decode(t, "\x83b\x7f\xff\xff\xff"), "")
+	assertEqual(t, int32(-2147483648), decode(t, "\x83b\x80\x00\x00\x00"), "")
+	assertEqual(t, int32(-1), decode(t, "\x83b\xff\xff\xff\xff"), "")
+}
 func TestDecodeBinaryToTermBinary(t *testing.T) {
 	assertDecodeError(t, "EOF", "\x83m", "")
 	assertDecodeError(t, "unexpected EOF", "\x83m\x00", "")
@@ -168,7 +226,6 @@ func TestDecodeBinaryToTermBinary(t *testing.T) {
 	assertEqual(t, OtpErlangBinary{Value: []byte(""), Bits: 8}, decode(t, "\x83m\x00\x00\x00\x00"), "")
 	assertEqual(t, OtpErlangBinary{Value: []byte("data"), Bits: 8}, decode(t, "\x83m\x00\x00\x00\x04data"), "")
 }
-
 func TestDecodeBinaryToTermFloat(t *testing.T) {
 	assertDecodeError(t, "EOF", "\x83F", "")
 	assertDecodeError(t, "unexpected EOF", "\x83F\x00", "")
@@ -181,8 +238,37 @@ func TestDecodeBinaryToTermFloat(t *testing.T) {
 	assertEqual(t, 0.0, decode(t, "\x83F\x00\x00\x00\x00\x00\x00\x00\x00"), "")
 	assertEqual(t, 1.5, decode(t, "\x83F?\xf8\x00\x00\x00\x00\x00\x00"), "")
 }
-
-//...
+func TestDecodeBinaryToTermSmallBigInteger(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83n", "")
+	assertDecodeError(t, "EOF", "\x83n\x00", "")
+	assertDecodeError(t, "EOF", "\x83n\x01\x00", "")
+	assertEqual(t, big.NewInt(0), decode(t, "\x83n\x00\x00"), "")
+	bignum1, _ := big.NewInt(0).SetString("6618611909121", 10)
+	assertEqual(t, bignum1, decode(t, "\x83n\x06\x00\x01\x02\x03\x04\x05\x06"), "")
+	bignum2, _ := big.NewInt(0).SetString("-6618611909121", 10)
+	assertEqual(t, bignum2, decode(t, "\x83n\x06\x01\x01\x02\x03\x04\x05\x06"), "")
+}
+func TestDecodeBinaryToTermLargeBigInteger(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83o", "")
+	assertDecodeError(t, "unexpected EOF", "\x83o\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83o\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83o\x00\x00\x00", "")
+	assertDecodeError(t, "EOF", "\x83o\x00\x00\x00\x00", "")
+	assertDecodeError(t, "EOF", "\x83o\x00\x00\x00\x01\x00", "")
+	assertEqual(t, big.NewInt(0), decode(t, "\x83o\x00\x00\x00\x00\x00"), "")
+	bignum1, _ := big.NewInt(0).SetString("6618611909121", 10)
+	assertEqual(t, bignum1, decode(t, "\x83o\x00\x00\x00\x06\x00\x01\x02\x03\x04\x05\x06"), "")
+	bignum2, _ := big.NewInt(0).SetString("-6618611909121", 10)
+	assertEqual(t, bignum2, decode(t, "\x83o\x00\x00\x00\x06\x01\x01\x02\x03\x04\x05\x06"), "")
+}
+func TestDecodeBinaryToTermCompressedTerm(t *testing.T) {
+	assertDecodeError(t, "EOF", "\x83P", "")
+	assertDecodeError(t, "unexpected EOF", "\x83P\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83P\x00\x00", "")
+	assertDecodeError(t, "unexpected EOF", "\x83P\x00\x00\x00", "")
+	assertDecodeError(t, "compressed data null", "\x83P\x00\x00\x00\x00", "")
+	assertEqual(t, strings.Repeat("d", 20), decode(t, "\x83P\x00\x00\x00\x17\x78\xda\xcb\x66\x10\x49\xc1\x02\x00\x5d\x60\x08\x50"), "")
+}
 
 func TestEncodeTermToBinaryTuple(t *testing.T) {
 	assertEqual(t, "\x83h\x00", encode(t, []interface{}{}, -1), "")

@@ -44,6 +44,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/binary"
+	"io"
 	"math"
 	"math/big"
 	"reflect"
@@ -99,7 +100,7 @@ type OtpErlangBinary struct {
 	Bits  uint8
 }
 
-// OtpErlangFunction represents FUN_EXT or NEW_FUN_EXT
+// OtpErlangFunction represents EXPORT_EXT, FUN_EXT or NEW_FUN_EXT
 type OtpErlangFunction struct {
 	Tag   uint8
 	Value []byte
@@ -415,7 +416,7 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		if err != nil {
 			return i, nil, err
 		}
-		return i, tmp, nil
+		return i, OtpErlangTuple(tmp), nil
 	case tagNilExt:
 		value := make([]interface{}, 0)
 		return i, OtpErlangList{Value: value, Improper: false}, nil
@@ -453,8 +454,8 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		var improper bool
 		switch tail.(type) {
-		case string:
-			improper = (tail.(string) != "")
+		case OtpErlangList:
+			improper = (len(tail.(OtpErlangList).Value) != 0)
 		default:
 			improper = true
 		}
@@ -492,7 +493,7 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 			j = int(jValue)
 		case tagLargeBigExt:
 			var jValue uint32
-			err = binary.Read(reader, binary.BigEndian, &j)
+			err = binary.Read(reader, binary.BigEndian, &jValue)
 			if err != nil {
 				return i, nil, err
 			}
@@ -506,7 +507,6 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		if err != nil {
 			return i, nil, err
 		}
-		i += 1
 		bignum := big.NewInt(0)
 		digit := make([]byte, 1)
 		for bignumIndex := 0; bignumIndex < j; bignumIndex++ {
@@ -520,6 +520,7 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		if sign == 1 {
 			bignum.Neg(bignum)
 		}
+		i += 1
 		_, err = reader.Seek(int64(j), 1)
 		if err != nil {
 			return i, nil, err
@@ -705,8 +706,37 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		return i + int(j), OtpErlangAtomUTF8(value), nil
 	case tagCompressedZlib:
-		//XXX
-		return i, nil, parseErrorNew("invalid")
+		var sizeUncompressed uint32
+		err = binary.Read(reader, binary.BigEndian, &sizeUncompressed)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		if sizeUncompressed == 0 {
+			return i, nil, parseErrorNew("compressed data null")
+		}
+		j := reader.Len()
+		var compress io.ReadCloser
+		compress, err = zlib.NewReader(reader)
+		if err != nil {
+			return i, nil, err
+		}
+		dataUncompressed := make([]byte, sizeUncompressed)
+		_, err = compress.Read(dataUncompressed)
+		if err != nil {
+			return i, nil, err
+		}
+		err = compress.Close()
+		if err != nil {
+			return i, nil, err
+		}
+		var iNew int
+		var term interface{}
+		iNew, term, err = binaryToTerms(0, bytes.NewReader(dataUncompressed))
+		if iNew != int(sizeUncompressed) {
+			return i, nil, parseErrorNew("unparsed data")
+		}
+		return i + j, term, nil
 	default:
 		return i, nil, parseErrorNew("invalid tag")
 	}
@@ -715,7 +745,7 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 func binaryToTermSequence(i, length int, reader *bytes.Reader) (int, []interface{}, error) {
 	sequence := make([]interface{}, length)
 	var err error
-	for lengthIndex := 0; lengthIndex <= length; lengthIndex++ {
+	for lengthIndex := 0; lengthIndex < length; lengthIndex++ {
 		var element interface{}
 		i, element, err = binaryToTerms(i, reader)
 		if err != nil {
