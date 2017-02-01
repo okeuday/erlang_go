@@ -46,6 +46,7 @@ import (
 	"encoding/binary"
 	"math"
 	"math/big"
+	"strconv"
 )
 
 const (
@@ -114,7 +115,8 @@ type OtpErlangMap map[interface{}]interface{}
 
 // OtpErlangPid represents PID_EXT
 type OtpErlangPid struct {
-	Node     OtpErlangAtom
+	NodeTag  uint8
+	Node     []byte
 	ID       []byte
 	Serial   []byte
 	Creation byte
@@ -122,14 +124,16 @@ type OtpErlangPid struct {
 
 // OtpErlangPort represents PORT_EXT
 type OtpErlangPort struct {
-	Node     OtpErlangAtom
+	NodeTag  uint8
+	Node     []byte
 	ID       []byte
 	Creation byte
 }
 
 // OtpErlangReference represents REFERENCE_EXT or NEW_REFERENCE_EXT
 type OtpErlangReference struct {
-	Node     OtpErlangAtom
+	NodeTag  uint8
+	Node     []byte
 	ID       []byte
 	Creation byte
 }
@@ -179,7 +183,28 @@ func (e *ParseError) Error() string {
 
 // BinaryToTerm decodes the Erlang Binary Term Format into Go types
 func BinaryToTerm(data []byte) (interface{}, error) {
-	return nil, parseErrorNew("invalid")
+	size := len(data)
+	if size <= 1 {
+		return nil, parseErrorNew("null input")
+	}
+	reader := bytes.NewReader(data)
+	version, err := reader.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	if version != tagVersion {
+		return nil, parseErrorNew("invalid version")
+	}
+	var i int
+	var term interface{}
+	i, term, err = binaryToTerms(1, reader)
+	if err != nil {
+		return nil, err
+	}
+	if i != size {
+		return nil, parseErrorNew("unparsed data")
+	}
+	return term, nil
 }
 
 // TermToBinary encodes Go types into the Erlang Binary Term Format
@@ -225,11 +250,571 @@ func TermToBinary(term interface{}, compressed int) ([]byte, error) {
 
 // BinaryToTerm implementation functions
 
-// XXX
+func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
+	tag, err := reader.ReadByte()
+	if err != nil {
+		return i, nil, err
+	}
+	i += 1
+	switch tag {
+	case tagNewFloatExt:
+		var value float64
+		err = binary.Read(reader, binary.BigEndian, &value)
+		return i + 8, value, err
+	case tagBitBinaryExt:
+		var j uint32
+		err = binary.Read(reader, binary.BigEndian, &j)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		var bits uint8
+		bits, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		i += 1
+		value := make([]byte, j)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + int(j), OtpErlangBinary{Value: value, Bits: bits}, nil
+	case tagAtomCacheRef:
+		var value uint8
+		value, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		return i + 1, OtpErlangAtomCacheRef(value), nil
+	case tagSmallIntegerExt:
+		var value uint8
+		value, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		return i + 1, uint8(value), nil
+	case tagIntegerExt:
+		var value int32
+		err = binary.Read(reader, binary.BigEndian, &value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + 4, value, nil
+	case tagFloatExt:
+		valueRaw := make([]byte, 31)
+		_, err = reader.Read(valueRaw)
+		if err != nil {
+			return i, nil, err
+		}
+		var value float64
+		value, err = strconv.ParseFloat(string(bytes.TrimRight(valueRaw, "\x00")), 64)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + 31, value, nil
+	case tagAtomExt:
+		var j uint16
+		err = binary.Read(reader, binary.BigEndian, &j)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 2
+		value := make([]byte, j)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + int(j), OtpErlangAtom(value), nil
+	case tagReferenceExt:
+		fallthrough
+	case tagPortExt:
+		var nodeTag uint8
+		var node []byte
+		i, nodeTag, node, err = binaryToAtom(i, reader)
+		if err != nil {
+			return i, nil, err
+		}
+		id := make([]byte, 4)
+		_, err = reader.Read(id)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		var creation byte
+		creation, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		i += 1
+		switch tag {
+		case tagReferenceExt:
+			return i, OtpErlangReference{NodeTag: nodeTag, Node: node, ID: id, Creation: creation}, nil
+		case tagPortExt:
+			return i, OtpErlangPort{NodeTag: nodeTag, Node: node, ID: id, Creation: creation}, nil
+		default:
+			return i, nil, parseErrorNew("invalid tag case")
+		}
+	case tagPidExt:
+		var nodeTag uint8
+		var node []byte
+		i, nodeTag, node, err = binaryToAtom(i, reader)
+		if err != nil {
+			return i, nil, err
+		}
+		id := make([]byte, 4)
+		_, err = reader.Read(id)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		serial := make([]byte, 4)
+		_, err = reader.Read(serial)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		var creation byte
+		creation, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		i += 1
+		return i, OtpErlangPid{NodeTag: nodeTag, Node: node, ID: id, Serial: serial, Creation: creation}, nil
+	case tagSmallTupleExt:
+		fallthrough
+	case tagLargeTupleExt:
+		var length int
+		switch tag {
+		case tagSmallTupleExt:
+			var lengthValue uint8
+			lengthValue, err = reader.ReadByte()
+			if err != nil {
+				return i, nil, err
+			}
+			i += 1
+			length = int(lengthValue)
+		case tagLargeTupleExt:
+			var lengthValue uint32
+			err = binary.Read(reader, binary.BigEndian, &lengthValue)
+			if err != nil {
+				return i, nil, err
+			}
+			i += 4
+			length = int(lengthValue)
+		default:
+			return i, nil, parseErrorNew("invalid tag case")
+		}
+		var tmp []interface{}
+		i, tmp, err = binaryToTermSequence(i, length, reader)
+		if err != nil {
+			return i, nil, err
+		}
+		return i, tmp, nil
+	case tagNilExt:
+		return i, "", nil
+	case tagStringExt:
+		var j uint16
+		err = binary.Read(reader, binary.BigEndian, &j)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 2
+		value := make([]byte, j)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + int(j), string(value), nil
+	case tagListExt:
+		var length uint32
+		err = binary.Read(reader, binary.BigEndian, &length)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		var tmp []interface{}
+		i, tmp, err = binaryToTermSequence(i, int(length), reader)
+		if err != nil {
+			return i, nil, err
+		}
+		var tail interface{}
+		i, tail, err = binaryToTerms(i, reader)
+		if err != nil {
+			return i, nil, err
+		}
+		var improper bool
+		switch tail.(type) {
+		case string:
+			improper = (tail.(string) != "")
+		default:
+			improper = true
+		}
+		if improper {
+			tmp = append(tmp, tail)
+		}
+		return i, OtpErlangList{Value: tmp, Improper: improper}, nil
+	case tagBinaryExt:
+		var j uint32
+		err = binary.Read(reader, binary.BigEndian, &j)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		value := make([]byte, j)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + int(j), OtpErlangBinary{Value: value, Bits: 8}, nil
+	case tagSmallBigExt:
+		fallthrough
+	case tagLargeBigExt:
+		var j int
+		switch tag {
+		case tagSmallBigExt:
+			var jValue uint8
+			jValue, err = reader.ReadByte()
+			if err != nil {
+				return i, nil, err
+			}
+			i += 1
+			j = int(jValue)
+		case tagLargeBigExt:
+			var jValue uint32
+			err = binary.Read(reader, binary.BigEndian, &j)
+			if err != nil {
+				return i, nil, err
+			}
+			i += 4
+			j = int(jValue)
+		default:
+			return i, nil, parseErrorNew("invalid tag case")
+		}
+		var sign uint8
+		sign, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		i += 1
+		bignum := big.NewInt(0)
+		digit := make([]byte, 1)
+		for bignumIndex := 0; bignumIndex < j; bignumIndex++ {
+			_, err = reader.ReadAt(digit, int64(i+j-bignumIndex))
+			if err != nil {
+				return i, nil, err
+			}
+			bignum.Lsh(bignum, 8)
+			bignum.Add(bignum, big.NewInt(int64(digit[0])))
+		}
+		if sign == 1 {
+			bignum.Neg(bignum)
+		}
+		_, err = reader.Seek(int64(j), 1)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + j, bignum, nil
+	case tagNewFunExt:
+		var length uint32
+		err = binary.Read(reader, binary.BigEndian, &length)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		value := make([]byte, length)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + int(length), OtpErlangFunction{Tag: tag, Value: value}, nil
+	case tagExportExt:
+		iOld := i
+		i, _, _, err = binaryToAtom(i, reader) // module
+		if err != nil {
+			return i, nil, err
+		}
+		i, _, _, err = binaryToAtom(i, reader) // function
+		if err != nil {
+			return i, nil, err
+		}
+		var arityTag uint8
+		arityTag, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		if arityTag != tagSmallIntegerExt {
+			return i, nil, parseErrorNew("invalid small integer tag")
+		}
+		i += 1
+		_, err = reader.ReadByte() // arity
+		if err != nil {
+			return i, nil, err
+		}
+		i += 1
+		value := make([]byte, i-iOld)
+		_, err = reader.ReadAt(value, int64(iOld))
+		if err != nil {
+			return i, nil, err
+		}
+		return i, OtpErlangFunction{Tag: tag, Value: value}, nil
+	case tagNewReferenceExt:
+		var j uint16
+		err = binary.Read(reader, binary.BigEndian, &j)
+		if err != nil {
+			return i, nil, err
+		}
+		j *= 4
+		i += 2
+		var nodeTag uint8
+		var node []byte
+		i, nodeTag, node, err = binaryToAtom(i, reader)
+		if err != nil {
+			return i, nil, err
+		}
+		var creation byte
+		creation, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		i += 1
+		id := make([]byte, j)
+		_, err = reader.Read(id)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + int(j), OtpErlangReference{NodeTag: nodeTag, Node: node, ID: id, Creation: creation}, nil
+	case tagSmallAtomExt:
+		var j uint8
+		j, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		i += 1
+		value := make([]byte, j)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + int(j), OtpErlangAtom(value), nil
+	case tagMapExt:
+		var length uint32
+		err = binary.Read(reader, binary.BigEndian, &length)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		var pairs map[interface{}]interface{}
+		for lengthIndex := 0; lengthIndex < int(length); lengthIndex++ {
+			var key interface{}
+			i, key, err = binaryToTerms(i, reader)
+			if err != nil {
+				return i, nil, err
+			}
+			var value interface{}
+			i, value, err = binaryToTerms(i, reader)
+			if err != nil {
+				return i, nil, err
+			}
+			pairs[key] = value
+		}
+		return i, OtpErlangMap(pairs), nil
+	case tagFunExt:
+		iOld := i
+		var numfree uint32
+		err = binary.Read(reader, binary.BigEndian, &numfree)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		i, _, err = binaryToPid(i, reader) // pid
+		if err != nil {
+			return i, nil, err
+		}
+		i, _, _, err = binaryToAtom(i, reader) // module
+		if err != nil {
+			return i, nil, err
+		}
+		i, _, err = binaryToInteger(i, reader) // index
+		if err != nil {
+			return i, nil, err
+		}
+		i, _, err = binaryToInteger(i, reader) // uniq
+		if err != nil {
+			return i, nil, err
+		}
+		i, _, err = binaryToTermSequence(i, int(numfree), reader) // free
+		if err != nil {
+			return i, nil, err
+		}
+		value := make([]byte, i-iOld)
+		_, err = reader.ReadAt(value, int64(iOld))
+		if err != nil {
+			return i, nil, err
+		}
+		return i, OtpErlangFunction{Tag: tag, Value: value}, nil
+	case tagAtomUtf8Ext:
+		var j uint16
+		err = binary.Read(reader, binary.BigEndian, &j)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 2
+		value := make([]byte, j)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + int(j), OtpErlangAtomUTF8(value), nil
+	case tagSmallAtomUtf8Ext:
+		var j uint8
+		j, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		i += 1
+		value := make([]byte, j)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + int(j), OtpErlangAtomUTF8(value), nil
+	case tagCompressedZlib:
+		//XXX
+		return i, nil, parseErrorNew("invalid")
+	default:
+		return i, nil, parseErrorNew("invalid tag")
+	}
+}
+
+func binaryToTermSequence(i, length int, reader *bytes.Reader) (int, []interface{}, error) {
+	sequence := make([]interface{}, length)
+	var err error
+	for lengthIndex := 0; lengthIndex <= length; lengthIndex++ {
+		var element interface{}
+		i, element, err = binaryToTerms(i, reader)
+		if err != nil {
+			return i, nil, err
+		}
+		sequence[lengthIndex] = element
+	}
+	return i, sequence, nil
+}
 
 // (BinaryToTerm Erlang term primitive type functions)
 
-// XXX
+func binaryToInteger(i int, reader *bytes.Reader) (int, interface{}, error) {
+	tag, err := reader.ReadByte()
+	if err != nil {
+		return i, nil, err
+	}
+	i += 1
+	switch tag {
+	case tagSmallIntegerExt:
+		var value uint8
+		value, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		return i + 1, uint8(value), nil
+	case tagIntegerExt:
+		var value int32
+		err = binary.Read(reader, binary.BigEndian, &value)
+		if err != nil {
+			return i, nil, err
+		}
+		return i + 4, value, nil
+	default:
+		return i, nil, parseErrorNew("invalid integer tag")
+	}
+}
+
+func binaryToPid(i int, reader *bytes.Reader) (int, interface{}, error) {
+	tag, err := reader.ReadByte()
+	if err != nil {
+		return i, nil, err
+	}
+	i += 1
+	switch tag {
+	case tagPidExt:
+		var nodeTag uint8
+		var node []byte
+		i, nodeTag, node, err = binaryToAtom(i, reader)
+		if err != nil {
+			return i, nil, err
+		}
+		id := make([]byte, 4)
+		_, err = reader.Read(id)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		serial := make([]byte, 4)
+		_, err = reader.Read(serial)
+		if err != nil {
+			return i, nil, err
+		}
+		i += 4
+		var creation byte
+		creation, err = reader.ReadByte()
+		if err != nil {
+			return i, nil, err
+		}
+		i += 1
+		return i, OtpErlangPid{NodeTag: nodeTag, Node: node, ID: id, Serial: serial, Creation: creation}, nil
+	default:
+		return i, nil, parseErrorNew("invalid pid tag")
+	}
+}
+
+func binaryToAtom(i int, reader *bytes.Reader) (int, uint8, []byte, error) {
+	tag, err := reader.ReadByte()
+	if err != nil {
+		return i, 0, nil, err
+	}
+	i += 1
+	switch tag {
+	case tagAtomExt:
+		fallthrough
+	case tagAtomUtf8Ext:
+		var j uint16
+		err = binary.Read(reader, binary.BigEndian, &j)
+		if err != nil {
+			return i, tag, nil, err
+		}
+		i += 2
+		value := make([]byte, j)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, tag, nil, err
+		}
+		return i + int(j), tag, value, nil
+	case tagSmallAtomExt:
+		fallthrough
+	case tagSmallAtomUtf8Ext:
+		var j uint8
+		j, err = reader.ReadByte()
+		if err != nil {
+			return i, tag, nil, err
+		}
+		i += 1
+		value := make([]byte, j)
+		_, err = reader.Read(value)
+		if err != nil {
+			return i, tag, nil, err
+		}
+		return i + int(j), tag, value, nil
+	case tagAtomCacheRef:
+		var value uint8
+		value, err = reader.ReadByte()
+		if err != nil {
+			return i, tag, nil, err
+		}
+		return i + 1, tag, []byte{value}, nil
+	default:
+		return i, tag, nil, parseErrorNew("invalid atom tag")
+	}
+}
 
 // TermToBinary implementation functions
 
@@ -612,7 +1197,11 @@ func pidToBinary(term OtpErlangPid, buffer *bytes.Buffer) (*bytes.Buffer, error)
 	if err != nil {
 		return buffer, err
 	}
-	buffer, err = termsToBinary(term.Node, buffer)
+	err = buffer.WriteByte(term.NodeTag)
+	if err != nil {
+		return buffer, err
+	}
+	_, err = buffer.Write(term.Node)
 	if err != nil {
 		return buffer, err
 	}
@@ -633,7 +1222,11 @@ func portToBinary(term OtpErlangPort, buffer *bytes.Buffer) (*bytes.Buffer, erro
 	if err != nil {
 		return buffer, err
 	}
-	buffer, err = termsToBinary(term.Node, buffer)
+	err = buffer.WriteByte(term.NodeTag)
+	if err != nil {
+		return buffer, err
+	}
+	_, err = buffer.Write(term.Node)
 	if err != nil {
 		return buffer, err
 	}
@@ -652,7 +1245,11 @@ func referenceToBinary(term OtpErlangReference, buffer *bytes.Buffer) (*bytes.Bu
 		if err != nil {
 			return buffer, err
 		}
-		buffer, err = termsToBinary(term.Node, buffer)
+		err = buffer.WriteByte(term.NodeTag)
+		if err != nil {
+			return buffer, err
+		}
+		_, err = buffer.Write(term.Node)
 		if err != nil {
 			return buffer, err
 		}
@@ -671,7 +1268,11 @@ func referenceToBinary(term OtpErlangReference, buffer *bytes.Buffer) (*bytes.Bu
 		if err != nil {
 			return buffer, err
 		}
-		buffer, err = termsToBinary(term.Node, buffer)
+		err = buffer.WriteByte(term.NodeTag)
+		if err != nil {
+			return buffer, err
+		}
+		_, err = buffer.Write(term.Node)
 		if err != nil {
 			return buffer, err
 		}

@@ -46,15 +46,15 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"reflect"
 	"strings"
 	"testing"
-	//"bytes"
 )
 
 func assertEqual(t *testing.T, expect interface{}, result interface{}, message string) {
 	// Go doesn't believe in assertions (https://golang.org/doc/faq#assertions)
 	// (Go isn't pursuing fail-fast development or fault-tolerance)
-	if expect == result {
+	if reflect.DeepEqual(expect, result) {
 		return
 	}
 	if len(message) == 0 {
@@ -64,6 +64,18 @@ func assertEqual(t *testing.T, expect interface{}, result interface{}, message s
 	log.SetPrefix("\t")
 	log.SetFlags(log.Lshortfile)
 	log.Output(2, message)
+}
+
+func decode(t *testing.T, b string) interface{} {
+	term, err := BinaryToTerm([]byte(b))
+	if err != nil {
+		log.SetPrefix("\t")
+		log.SetFlags(log.Lshortfile)
+		log.Output(2, err.Error())
+		t.FailNow()
+		return nil
+	}
+	return term
 }
 
 func encode(t *testing.T, term interface{}, compressed int) string {
@@ -98,6 +110,12 @@ func TestImproperListErrors(t *testing.T) {
 }
 
 func TestDecodeBinaryToTerm(t *testing.T) {
+}
+
+//...
+func TestDecodeBinaryToTermBinary(t *testing.T) {
+	assertEqual(t, OtpErlangBinary{Value: []byte(""), Bits: 8}, decode(t, "\x83m\x00\x00\x00\x00"), "")
+	assertEqual(t, OtpErlangBinary{Value: []byte("data"), Bits: 8}, decode(t, "\x83m\x00\x00\x00\x04data"), "")
 }
 
 //...
