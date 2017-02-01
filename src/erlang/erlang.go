@@ -726,13 +726,17 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		if err != nil {
 			return i, nil, err
 		}
-		err = compress.Close()
-		if err != nil {
-			return i, nil, err
-		}
+		compress.Close()
+		//err = compress.Close()
+		//if err != nil {
+		//	return i, nil, err
+		//}
 		var iNew int
 		var term interface{}
 		iNew, term, err = binaryToTerms(0, bytes.NewReader(dataUncompressed))
+		if err != nil {
+			return i, nil, err
+		}
 		if iNew != int(sizeUncompressed) {
 			return i, nil, parseErrorNew("unparsed data")
 		}
