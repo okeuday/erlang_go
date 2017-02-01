@@ -46,6 +46,7 @@ import (
 	"encoding/binary"
 	"math"
 	"math/big"
+	"reflect"
 	"strconv"
 )
 
@@ -416,7 +417,8 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		return i, tmp, nil
 	case tagNilExt:
-		return i, "", nil
+		value := make([]interface{}, 0)
+		return i, OtpErlangList{Value: value, Improper: false}, nil
 	case tagStringExt:
 		var j uint16
 		err = binary.Read(reader, binary.BigEndian, &j)
@@ -624,6 +626,11 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 			i, key, err = binaryToTerms(i, reader)
 			if err != nil {
 				return i, nil, err
+			}
+			if !reflect.TypeOf(key).Comparable() {
+				// no way to solve this properly in go while preserving
+				// the Erlang type information
+				return i, nil, parseErrorNew("map key not comparable")
 			}
 			var value interface{}
 			i, value, err = binaryToTerms(i, reader)
