@@ -722,15 +722,15 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 			return i, nil, err
 		}
 		dataUncompressed := make([]byte, sizeUncompressed)
-		_, err = compress.Read(dataUncompressed)
+		var sizeUncompressedStored int
+		sizeUncompressedStored, _ = compress.Read(dataUncompressed)
+		err = compress.Close()
 		if err != nil {
 			return i, nil, err
 		}
-		compress.Close()
-		//err = compress.Close()
-		//if err != nil {
-		//	return i, nil, err
-		//}
+		if int(sizeUncompressed) != sizeUncompressedStored {
+			return i, nil, parseErrorNew("compression corrupt")
+		}
 		var iNew int
 		var term interface{}
 		iNew, term, err = binaryToTerms(0, bytes.NewReader(dataUncompressed))
