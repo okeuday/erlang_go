@@ -222,7 +222,8 @@ func TermToBinary(term interface{}, compressed int) ([]byte, error) {
 		return append([]byte{tagVersion}, dataUncompressed.Bytes()...), nil
 	}
 	var dataCompressed *bytes.Buffer = new(bytes.Buffer)
-	compress, err := zlib.NewWriterLevel(dataCompressed, compressed)
+	var compress *zlib.Writer
+	compress, err = zlib.NewWriterLevel(dataCompressed, compressed)
 	if err != nil {
 		return nil, err
 	}
@@ -629,7 +630,7 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 				return i, nil, err
 			}
 			if !reflect.TypeOf(key).Comparable() {
-				// no way to solve this properly in go while preserving
+				// no way to solve this properly in Go while preserving
 				// the Erlang type information
 				return i, nil, parseErrorNew("map key not comparable")
 			}
@@ -841,13 +842,15 @@ func binaryToAtom(i int, reader *bytes.Reader) (int, uint8, []byte, error) {
 		if err != nil {
 			return i, tag, nil, err
 		}
+		value := make([]byte, 2+j)
+		_, err = reader.ReadAt(value, int64(i))
+		if err != nil {
+			return i, tag, nil, err
+		}
 		i += 2
-		value := make([]byte, j)
-		if j > 0 {
-			_, err = reader.Read(value)
-			if err != nil {
-				return i, tag, nil, err
-			}
+		_, err = reader.Seek(int64(j), 1)
+		if err != nil {
+			return i, tag, nil, err
 		}
 		return i + int(j), tag, value, nil
 	case tagSmallAtomExt:
@@ -858,13 +861,15 @@ func binaryToAtom(i int, reader *bytes.Reader) (int, uint8, []byte, error) {
 		if err != nil {
 			return i, tag, nil, err
 		}
+		value := make([]byte, 1+j)
+		_, err = reader.ReadAt(value, int64(i))
+		if err != nil {
+			return i, tag, nil, err
+		}
 		i += 1
-		value := make([]byte, j)
-		if j > 0 {
-			_, err = reader.Read(value)
-			if err != nil {
-				return i, tag, nil, err
-			}
+		_, err = reader.Seek(int64(j), 1)
+		if err != nil {
+			return i, tag, nil, err
 		}
 		return i + int(j), tag, value, nil
 	case tagAtomCacheRef:
