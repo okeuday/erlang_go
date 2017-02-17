@@ -82,7 +82,7 @@ const (
 	tagAtomUtf8Ext      = 118
 	tagSmallAtomUtf8Ext = 119
 
-	bufferSize          = 65536
+	bufferSize = 65536
 )
 
 // Erlang term structs listed alphabetically
