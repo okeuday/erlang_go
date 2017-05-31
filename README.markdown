@@ -20,3 +20,12 @@ Test
 
     go test erlang
 
+Author
+------
+
+Michael Truog (mjtruog [at] gmail (dot) com)
+
+License
+-------
+
+MIT License
