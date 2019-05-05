@@ -1320,13 +1320,13 @@ func functionToBinary(term OtpErlangFunction, buffer *bytes.Buffer) (*bytes.Buff
 
 func pidToBinary(term OtpErlangPid, buffer *bytes.Buffer) (*bytes.Buffer, error) {
 	var err error
-	switch creation_size := len(term.Creation); {
-	case creation_size == 1:
+	switch creationSize := len(term.Creation); {
+	case creationSize == 1:
 		err = buffer.WriteByte(tagPidExt)
 		if err != nil {
 			return buffer, err
 		}
-	case creation_size == 4:
+	case creationSize == 4:
 		err = buffer.WriteByte(tagNewPidExt)
 		if err != nil {
 			return buffer, err
@@ -1356,13 +1356,13 @@ func pidToBinary(term OtpErlangPid, buffer *bytes.Buffer) (*bytes.Buffer, error)
 
 func portToBinary(term OtpErlangPort, buffer *bytes.Buffer) (*bytes.Buffer, error) {
 	var err error
-	switch creation_size := len(term.Creation); {
-	case creation_size == 1:
+	switch creationSize := len(term.Creation); {
+	case creationSize == 1:
 		err = buffer.WriteByte(tagPortExt)
 		if err != nil {
 			return buffer, err
 		}
-	case creation_size == 4:
+	case creationSize == 4:
 		err = buffer.WriteByte(tagNewPortExt)
 		if err != nil {
 			return buffer, err
@@ -1409,13 +1409,13 @@ func referenceToBinary(term OtpErlangReference, buffer *bytes.Buffer) (*bytes.Bu
 		return buffer, err
 	case length <= math.MaxUint16:
 		var err error
-		switch creation_size := len(term.Creation); {
-		case creation_size == 1:
+		switch creationSize := len(term.Creation); {
+		case creationSize == 1:
 			err = buffer.WriteByte(tagNewReferenceExt)
 			if err != nil {
 				return buffer, err
 			}
-		case creation_size == 4:
+		case creationSize == 4:
 			err = buffer.WriteByte(tagNewerReferenceExt)
 			if err != nil {
 				return buffer, err
