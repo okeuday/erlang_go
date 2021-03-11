@@ -13,12 +13,12 @@ in a single Go package.
 Build
 -----
 
-    go build erlang
+    go build ./...
 
 Test
 ----
 
-    go test erlang
+    go test ./...
 
 Author
 ------
