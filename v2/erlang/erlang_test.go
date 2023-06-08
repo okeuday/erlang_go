@@ -197,6 +197,12 @@ func TestDecodeBinaryToTermList(t *testing.T) {
 	list1[1] = OtpErlangList{Value: make([]interface{}, 0), Improper: false}
 	assertEqual(t, OtpErlangList{Value: list1, Improper: false}, decode(t, "\x83l\x00\x00\x00\x02jjj"), "")
 }
+func TestDecodeBinaryToTermLargeList(t *testing.T) {
+	n := 256
+	encoded := encode(t, OtpErlangList{Value: listOfLargeTuples(n)}, 1)
+	decoded := decode(t, encoded)
+	assertEqual(t, n, len(decoded.(OtpErlangList).Value), "")
+}
 func TestDecodeBinaryToTermImproperList(t *testing.T) {
 	assertDecodeError(t, "EOF", "\x83l\x00\x00\x00k", "")
 	lst := decode(t, "\x83l\x00\x00\x00\x01jv\x00\x04tail")
@@ -451,4 +457,30 @@ func TestEncodeTermToBinaryCompressedTerm(t *testing.T) {
 	assertEqual(t, "\x83P\x00\x00\x00\x15x\xda\xcaa``\xe0\xcfB\x03\x80\x00\x00\x00\xff\xffB@\a\x1c", encode(t, list2, 9), "")
 	assertEqual(t, "\x83P\x00\x00\x00\x15x\x01\x00\x15\x00\xea\xffl\x00\x00\x00\x0fjjjjjjjjjjjjjjjj\x01\x00\x00\xff\xffB@\a\x1c", encode(t, list2, 0), "")
 	assertEqual(t, "\x83P\x00\x00\x00\x17x\xda\xcaf\x10I\xc1\x02\x00\x01\x00\x00\xff\xff]`\bP", encode(t, strings.Repeat("d", 20), 9), "")
+}
+
+func listOfLargeTuples(size int) []interface{} {
+	// resembles an entry of the Apache CouchDB's update_seq in a clustered setup
+	example := OtpErlangTuple{
+		OtpErlangAtom("couchdb@this-is-a-long-hostname-somewhere-over-the-rainbow-in-the.cloudapp.net"),
+		OtpErlangList{
+			Value: []interface{}{
+				big.NewInt(4278190080),
+				big.NewInt(4294967295),
+			},
+		},
+		OtpErlangTuple{
+			1012001,
+			OtpErlangBinary{
+				Value: []uint8{31, 42, 53, 64, 75, 86, 97},
+				Bits:  8,
+			},
+			OtpErlangAtom("couchdb@this-is-a-long-hostname-somewhere-over-the-rainbow-in-the.cloudapp.net"),
+		},
+	}
+	tuples := make([]interface{}, size)
+	for i := 0; i < size; i++ {
+		tuples[i] = example
+	}
+	return tuples
 }
