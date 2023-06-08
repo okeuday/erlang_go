@@ -782,7 +782,7 @@ func binaryToTerms(i int, reader *bytes.Reader) (int, interface{}, error) {
 		}
 		dataUncompressed := make([]byte, sizeUncompressed)
 		var sizeUncompressedStored int
-		sizeUncompressedStored, _ = compress.Read(dataUncompressed)
+		sizeUncompressedStored, _ = io.ReadFull(compress, dataUncompressed)
 		err = compress.Close()
 		if err != nil {
 			return i, nil, err
